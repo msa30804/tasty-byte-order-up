@@ -101,6 +101,7 @@ const Signup: React.FC = () => {
               <Input 
                 id="password" 
                 type="password"
+                placeholder="Create a password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
