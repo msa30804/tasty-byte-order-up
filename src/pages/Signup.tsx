@@ -4,25 +4,55 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useAuth } from '@/contexts/AuthContext';
+import { createUser } from '@/lib/supabase';
 import { Navigate, Link } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { UserIcon } from '@/components/pos/PosIcons';
+import { useToast } from '@/components/ui/use-toast';
 
-const Login: React.FC = () => {
+const Signup: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { login, isAuthenticated, isLoading } = useAuth();
-  
+  const { isAuthenticated, isLoading } = useAuth();
+  const { toast } = useToast();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) return;
+    if (!email || !password || !name) {
+      toast({
+        title: "Error",
+        description: "Please fill in all fields",
+        variant: "destructive",
+      });
+      return;
+    }
     
     try {
       setIsSubmitting(true);
-      await login(email, password);
-    } catch (error) {
-      console.error('Login error:', error);
+      const { user, error } = await createUser(email, password, name);
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast({
+        title: "Account created",
+        description: "Your account has been created. Please login.",
+      });
+      
+      // Redirect to login page after successful signup
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 2000);
+      
+    } catch (error: any) {
+      toast({
+        title: "Signup failed",
+        description: error.message || "Could not create account",
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -39,11 +69,22 @@ const Login: React.FC = () => {
           <div className="flex justify-center mb-4">
             <UserIcon className="h-12 w-12 text-restaurant-burgundy" />
           </div>
-          <CardTitle className="text-2xl">Tasty Byte POS</CardTitle>
-          <CardDescription>Enter your credentials to sign in</CardDescription>
+          <CardTitle className="text-2xl">Create an Account</CardTitle>
+          <CardDescription>Enter your details to sign up</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input 
+                id="name" 
+                type="text" 
+                placeholder="Your name" 
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input 
@@ -72,12 +113,12 @@ const Login: React.FC = () => {
               type="submit"
               disabled={isSubmitting || isLoading}
             >
-              {isSubmitting ? 'Signing in...' : 'Sign In'}
+              {isSubmitting ? 'Creating account...' : 'Sign Up'}
             </Button>
             <div className="text-center text-sm">
-              Don't have an account?{" "}
-              <Link to="/signup" className="text-restaurant-burgundy hover:underline">
-                Sign Up
+              Already have an account?{" "}
+              <Link to="/login" className="text-restaurant-burgundy hover:underline">
+                Sign In
               </Link>
             </div>
           </CardFooter>
@@ -87,4 +128,4 @@ const Login: React.FC = () => {
   );
 };
 
-export default Login;
+export default Signup;
