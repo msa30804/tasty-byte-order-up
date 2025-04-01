@@ -1,4 +1,3 @@
-
 import { 
   Coffee, 
   Utensils, 
@@ -16,7 +15,15 @@ import {
   Save, 
   Receipt,
   UserCircle,
-  CheckCircle2
+  CheckCircle2,
+  Printer,
+  Edit,
+  Percent,
+  Settings,
+  Users,
+  LogOut,
+  Home,
+  Database
 } from "lucide-react";
 
 export const RestaurantIcon = Utensils;
@@ -33,8 +40,15 @@ export const SaveIcon = Save;
 export const ReceiptIcon = Receipt;
 export const UserIcon = UserCircle;
 export const CheckIcon = CheckCircle2;
+export const PrinterIcon = Printer;
+export const EditIcon = Edit;
+export const PercentIcon = Percent;
+export const SettingsIcon = Settings;
+export const UsersIcon = Users;
+export const LogOutIcon = LogOut;
+export const HomeIcon = Home;
+export const DatabaseIcon = Database;
 
-// Menu category icons
 export const StarterIcon = Coffee;
 export const MainCourseIcon = Utensils;
 export const DessertIcon = Dessert;

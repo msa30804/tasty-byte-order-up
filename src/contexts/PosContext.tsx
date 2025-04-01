@@ -1,6 +1,8 @@
 
-import React, { createContext, useState, useContext, ReactNode } from "react";
+import React, { createContext, useState, useContext, ReactNode, useEffect } from "react";
 import { toast } from "@/components/ui/use-toast";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "./AuthContext";
 
 export type MenuItem = {
   id: string;
@@ -28,6 +30,10 @@ export type Order = {
   status: "pending" | "preparing" | "ready" | "served" | "paid";
   createdAt: Date;
   updatedAt: Date;
+  discount?: {
+    type: 'percentage' | 'amount';
+    value: number;
+  };
 };
 
 export type Table = {
@@ -54,26 +60,10 @@ type PosContextType = {
   updateOrderItemQuantity: (orderItemId: string, quantity: number) => void;
   completeOrder: () => void;
   payOrder: () => void;
+  applyDiscount: (type: 'percentage' | 'amount', value: number) => void;
 };
 
-const defaultServerName = "Server";
-
-// Demo data
-const demoMenuItems: MenuItem[] = [
-  { id: "1", name: "Classic Burger", price: 12.99, category: "Main Course", image: "/placeholder.svg", description: "Juicy beef patty with lettuce, tomato, and our special sauce" },
-  { id: "2", name: "Caesar Salad", price: 9.99, category: "Starters", image: "/placeholder.svg", description: "Crisp romaine lettuce with creamy Caesar dressing, croutons, and parmesan" },
-  { id: "3", name: "Margherita Pizza", price: 14.99, category: "Main Course", image: "/placeholder.svg", description: "Fresh mozzarella, tomato sauce, and basil on a thin crust" },
-  { id: "4", name: "French Fries", price: 4.99, category: "Sides", image: "/placeholder.svg", description: "Crispy golden fries served with ketchup" },
-  { id: "5", name: "Chocolate Lava Cake", price: 7.99, category: "Desserts", image: "/placeholder.svg", description: "Warm chocolate cake with a molten center, served with vanilla ice cream" },
-  { id: "6", name: "Iced Tea", price: 2.99, category: "Drinks", image: "/placeholder.svg", description: "Refreshing iced tea with lemon" },
-  { id: "7", name: "Craft Beer", price: 6.99, category: "Drinks", image: "/placeholder.svg", description: "Local craft beer on tap" },
-  { id: "8", name: "Chicken Wings", price: 11.99, category: "Starters", image: "/placeholder.svg", description: "Crispy wings tossed in your choice of sauce" },
-  { id: "9", name: "Fish & Chips", price: 15.99, category: "Main Course", image: "/placeholder.svg", description: "Beer-battered fish with thick-cut fries and tartar sauce" },
-  { id: "10", name: "Onion Rings", price: 5.99, category: "Sides", image: "/placeholder.svg", description: "Crispy battered onion rings" },
-  { id: "11", name: "Cheesecake", price: 6.99, category: "Desserts", image: "/placeholder.svg", description: "New York style cheesecake with berry compote" },
-  { id: "12", name: "Espresso", price: 3.49, category: "Drinks", image: "/placeholder.svg", description: "Double shot of our premium espresso blend" },
-];
-
+// Demo data for tables
 const demoTables: Table[] = [
   { id: 1, number: 1, seats: 2, status: "available" },
   { id: 2, number: 2, seats: 2, status: "available" },
@@ -90,15 +80,38 @@ const demoTables: Table[] = [
 const PosContext = createContext<PosContextType | undefined>(undefined);
 
 export const PosProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [menuItems] = useState<MenuItem[]>(demoMenuItems);
-  const [categories] = useState<string[]>([...new Set(demoMenuItems.map(item => item.category))]);
+  const { user } = useAuth();
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>(categories[0] || "All");
   const [orders, setOrders] = useState<Order[]>([]);
   const [tables, setTables] = useState<Table[]>(demoTables);
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [activeTable, setActiveTable] = useState<Table | null>(null);
-
-  const createOrder = (tableNumber: number, serverName: string = defaultServerName) => {
+  
+  // Fetch initial menu items from Supabase
+  useEffect(() => {
+    const fetchMenuItems = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('menu_items')
+          .select('*')
+          .order('name');
+          
+        if (error) throw error;
+        
+        setMenuItems(data || []);
+        const uniqueCategories = [...new Set((data || []).map(item => item.category))];
+        setCategories(uniqueCategories);
+      } catch (error) {
+        console.error('Error fetching menu items:', error);
+      }
+    };
+    
+    fetchMenuItems();
+  }, []);
+  
+  const createOrder = (tableNumber: number, serverName: string = user?.name || "Server") => {
     const tableIndex = tables.findIndex(t => t.number === tableNumber);
     if (tableIndex === -1) return;
     
@@ -263,6 +276,29 @@ export const PosProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       updatedAt: new Date(),
     };
     
+    // Save order to database (if needed)
+    const saveOrderToDatabase = async () => {
+      try {
+        await supabase
+          .from('orders')
+          .insert([{
+            id: updatedOrder.id,
+            table_number: updatedOrder.tableNumber,
+            server_name: updatedOrder.serverName,
+            items: JSON.stringify(updatedOrder.items),
+            status: updatedOrder.status,
+            created_at: updatedOrder.createdAt.toISOString(),
+            updated_at: updatedOrder.updatedAt.toISOString(),
+            discount: updatedOrder.discount ? JSON.stringify(updatedOrder.discount) : null,
+            total_amount: calculateTotal(updatedOrder),
+          }]);
+      } catch (error) {
+        console.error('Error saving order:', error);
+      }
+    };
+    
+    saveOrderToDatabase();
+    
     setOrders(prev => prev.map(o => o.id === activeOrder.id ? updatedOrder : o));
     
     const updatedTables = tables.map(t => 
@@ -281,6 +317,43 @@ export const PosProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
   
+  const applyDiscount = (type: 'percentage' | 'amount', value: number) => {
+    if (!activeOrder) return;
+    
+    const updatedOrder = {
+      ...activeOrder,
+      discount: { type, value },
+      updatedAt: new Date(),
+    };
+    
+    setOrders(prev => prev.map(o => o.id === activeOrder.id ? updatedOrder : o));
+    setActiveOrder(updatedOrder);
+    
+    if (activeTable) {
+      const updatedTables = tables.map(t => 
+        t.id === activeTable.id 
+          ? { ...t, order: updatedOrder }
+          : t
+      );
+      setTables(updatedTables);
+    }
+  };
+  
+  const calculateTotal = (order: Order) => {
+    const subtotal = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    let discount = 0;
+    if (order.discount) {
+      discount = order.discount.type === 'percentage' 
+        ? subtotal * (order.discount.value / 100)
+        : Math.min(order.discount.value, subtotal);
+    }
+    
+    const discountedSubtotal = subtotal - discount;
+    const tax = discountedSubtotal * 0.0825;
+    return discountedSubtotal + tax;
+  };
+  
   const value = {
     menuItems,
     categories,
@@ -297,6 +370,7 @@ export const PosProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     updateOrderItemQuantity,
     completeOrder,
     payOrder,
+    applyDiscount,
   };
   
   return <PosContext.Provider value={value}>{children}</PosContext.Provider>;

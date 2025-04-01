@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useState } from "react";
 import { usePos } from "@/contexts/PosContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,12 +7,21 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogDescription, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { TrashIcon, MinusIcon, PlusIcon, ReceiptIcon } from "./PosIcons";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useAuth } from "@/contexts/AuthContext";
+import { TrashIcon, MinusIcon, PlusIcon, ReceiptIcon, PrinterIcon, EditIcon, PercentIcon } from "./PosIcons";
 import { toast } from "@/components/ui/use-toast";
+import { format } from "date-fns";
 
 const CheckoutView: React.FC = () => {
   const { activeOrder, activeTable, updateOrderItemQuantity, removeFromOrder, payOrder } = usePos();
-  const [checkoutDialogOpen, setCheckoutDialogOpen] = React.useState(false);
+  const { user } = useAuth();
+  const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
+  const [discountDialogOpen, setDiscountDialogOpen] = useState(false);
+  const [printDialogOpen, setPrintDialogOpen] = useState(false);
+  const [discountType, setDiscountType] = useState<'percentage' | 'amount'>('percentage');
+  const [discountValue, setDiscountValue] = useState<number>(0);
   
   if (!activeOrder || !activeTable) {
     return (
@@ -40,8 +49,14 @@ const CheckoutView: React.FC = () => {
     0
   );
   
-  const tax = subtotal * 0.0825; // 8.25% tax rate
-  const total = subtotal + tax;
+  const discount = discountType === 'percentage' 
+    ? subtotal * (discountValue / 100)
+    : Math.min(discountValue, subtotal);
+    
+  const discountedSubtotal = subtotal - discount;
+  
+  const tax = discountedSubtotal * 0.0825; // 8.25% tax rate
+  const total = discountedSubtotal + tax;
   
   const handleCheckout = () => {
     setCheckoutDialogOpen(false);
@@ -50,6 +65,127 @@ const CheckoutView: React.FC = () => {
       title: "Payment Successful",
       description: `Order for Table ${activeTable.number} has been completed`,
     });
+  };
+  
+  const handleApplyDiscount = () => {
+    setDiscountDialogOpen(false);
+    toast({
+      title: "Discount Applied",
+      description: `${discountType === 'percentage' ? `${discountValue}%` : `$${discountValue.toFixed(2)}`} discount applied to order`,
+    });
+  };
+  
+  const handlePrint = () => {
+    const receipt = generateReceipt();
+    
+    // Open print dialog with formatted receipt
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Receipt - Table ${activeTable.number}</title>
+            <style>
+              body {
+                font-family: monospace;
+                padding: 20px;
+                max-width: 400px;
+                margin: 0 auto;
+              }
+              .header {
+                text-align: center;
+                margin-bottom: 20px;
+              }
+              .item {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 5px;
+              }
+              .total {
+                margin-top: 10px;
+                border-top: 1px dashed #000;
+                padding-top: 10px;
+                font-weight: bold;
+              }
+              .footer {
+                margin-top: 30px;
+                text-align: center;
+                font-size: 14px;
+              }
+              @media print {
+                button {
+                  display: none;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h2>Tasty Byte Restaurant</h2>
+              <p>123 Food St, Foodville</p>
+              <p>Phone: (123) 456-7890</p>
+              <p>Date: ${format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
+              <h3>Table ${activeTable.number} - Receipt</h3>
+              <p>Server: ${activeOrder.serverName}</p>
+            </div>
+            
+            <div class="items">
+              ${receipt.items}
+            </div>
+            
+            <div class="item">
+              <span>Subtotal:</span>
+              <span>$${subtotal.toFixed(2)}</span>
+            </div>
+            
+            ${discount > 0 ? `
+              <div class="item">
+                <span>Discount:</span>
+                <span>-$${discount.toFixed(2)}</span>
+              </div>
+            ` : ''}
+            
+            <div class="item">
+              <span>Tax (8.25%):</span>
+              <span>$${tax.toFixed(2)}</span>
+            </div>
+            
+            <div class="total">
+              <span>Total:</span>
+              <span>$${total.toFixed(2)}</span>
+            </div>
+            
+            <div class="footer">
+              <p>Thank you for dining with us!</p>
+              <p>Please come again</p>
+            </div>
+            
+            <button onclick="window.print(); window.close();">Print Receipt</button>
+          </body>
+        </html>
+      `);
+      
+      printWindow.document.close();
+    }
+    
+    setPrintDialogOpen(false);
+  };
+  
+  const generateReceipt = () => {
+    let itemsHtml = '';
+    
+    activeOrder.items.forEach(item => {
+      itemsHtml += `
+        <div class="item">
+          <span>${item.quantity}x ${item.name}</span>
+          <span>$${(item.price * item.quantity).toFixed(2)}</span>
+        </div>
+      `;
+    });
+    
+    return {
+      items: itemsHtml
+    };
   };
 
   return (
@@ -146,6 +282,13 @@ const CheckoutView: React.FC = () => {
               <span>${subtotal.toFixed(2)}</span>
             </div>
             
+            {discount > 0 && (
+              <div className="flex justify-between text-green-600">
+                <span>Discount {discountType === 'percentage' ? `(${discountValue}%)` : ''}</span>
+                <span>-${discount.toFixed(2)}</span>
+              </div>
+            )}
+            
             <div className="flex justify-between">
               <span className="text-muted-foreground">Tax (8.25%)</span>
               <span>${tax.toFixed(2)}</span>
@@ -157,6 +300,26 @@ const CheckoutView: React.FC = () => {
               <span>Total</span>
               <span>${total.toFixed(2)}</span>
             </div>
+          </div>
+          
+          <div className="flex flex-col gap-2">
+            <Button 
+              variant="outline"
+              className="w-full flex items-center justify-center"
+              onClick={() => setDiscountDialogOpen(true)}
+              disabled={activeOrder.items.length === 0}
+            >
+              <PercentIcon className="mr-2 h-5 w-5" /> Add Discount
+            </Button>
+            
+            <Button 
+              variant="outline"
+              className="w-full flex items-center justify-center"
+              onClick={() => setPrintDialogOpen(true)}
+              disabled={activeOrder.items.length === 0}
+            >
+              <PrinterIcon className="mr-2 h-5 w-5" /> Print Bill
+            </Button>
           </div>
         </CardContent>
         
@@ -171,6 +334,7 @@ const CheckoutView: React.FC = () => {
         </CardFooter>
       </Card>
       
+      {/* Checkout Dialog */}
       <Dialog open={checkoutDialogOpen} onOpenChange={setCheckoutDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -203,6 +367,137 @@ const CheckoutView: React.FC = () => {
               onClick={handleCheckout}
             >
               Complete Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Discount Dialog */}
+      <Dialog open={discountDialogOpen} onOpenChange={setDiscountDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Discount</DialogTitle>
+            <DialogDescription>
+              Apply a discount to the current order
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="flex items-center space-x-2">
+              <Button 
+                variant={discountType === 'percentage' ? 'default' : 'outline'}
+                onClick={() => setDiscountType('percentage')}
+                className={discountType === 'percentage' ? 'bg-restaurant-burgundy hover:bg-restaurant-burgundy/90' : ''}
+              >
+                Percentage (%)
+              </Button>
+              <Button 
+                variant={discountType === 'amount' ? 'default' : 'outline'}
+                onClick={() => setDiscountType('amount')}
+                className={discountType === 'amount' ? 'bg-restaurant-burgundy hover:bg-restaurant-burgundy/90' : ''}
+              >
+                Fixed Amount ($)
+              </Button>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="discountValue">
+                {discountType === 'percentage' ? 'Discount Percentage' : 'Discount Amount'}
+              </Label>
+              <Input
+                id="discountValue"
+                type="number"
+                min="0"
+                max={discountType === 'percentage' ? '100' : undefined}
+                step={discountType === 'percentage' ? '1' : '0.01'}
+                value={discountValue || ''}
+                onChange={(e) => setDiscountValue(Number(e.target.value))}
+                placeholder={discountType === 'percentage' ? 'Enter percentage' : 'Enter amount'}
+              />
+              
+              {discountType === 'percentage' ? (
+                <p className="text-sm text-muted-foreground">
+                  ${(subtotal * (discountValue / 100)).toFixed(2)} off total
+                </p>
+              ) : null}
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiscountDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              className="bg-restaurant-burgundy hover:bg-restaurant-burgundy/90"
+              onClick={handleApplyDiscount}
+            >
+              Apply Discount
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Print Dialog */}
+      <Dialog open={printDialogOpen} onOpenChange={setPrintDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Print Bill</DialogTitle>
+            <DialogDescription>
+              Print receipt for Table {activeTable.number}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4 border rounded-md p-4 bg-gray-50 font-mono text-sm">
+            <div className="text-center">
+              <p className="font-bold">Tasty Byte Restaurant</p>
+              <p>Table {activeTable.number} - Receipt Preview</p>
+              <p>Server: {activeOrder.serverName}</p>
+              <p>{format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
+            </div>
+            
+            <Separator />
+            
+            {activeOrder.items.map((item) => (
+              <div key={item.id} className="flex justify-between">
+                <span>{item.quantity}× {item.name}</span>
+                <span>${(item.price * item.quantity).toFixed(2)}</span>
+              </div>
+            ))}
+            
+            <Separator />
+            
+            <div className="flex justify-between">
+              <span>Subtotal:</span>
+              <span>${subtotal.toFixed(2)}</span>
+            </div>
+            
+            {discount > 0 && (
+              <div className="flex justify-between">
+                <span>Discount:</span>
+                <span>-${discount.toFixed(2)}</span>
+              </div>
+            )}
+            
+            <div className="flex justify-between">
+              <span>Tax (8.25%):</span>
+              <span>${tax.toFixed(2)}</span>
+            </div>
+            
+            <div className="flex justify-between font-bold">
+              <span>Total:</span>
+              <span>${total.toFixed(2)}</span>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPrintDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              className="bg-restaurant-burgundy hover:bg-restaurant-burgundy/90"
+              onClick={handlePrint}
+            >
+              <PrinterIcon className="mr-2 h-4 w-4" /> Print Bill
             </Button>
           </DialogFooter>
         </DialogContent>
