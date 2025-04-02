@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = 'https://nphhfguutnhlcunamqty.supabase.co';
@@ -16,13 +15,38 @@ export interface User {
   created_at: string;
 }
 
+// Hardcoded user data
+const hardcodedUsers = {
+  'admin@tastybyte.com': {
+    name: 'Admin User',
+    role: 'admin' as UserRole
+  },
+  'cashier@tastybyte.com': {
+    name: 'Cashier User',
+    role: 'cashier' as UserRole
+  }
+};
+
 // Helper functions for auth
 export const getCurrentUser = async () => {
   const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) return null;
   
-  // Get the user's profile with role information
+  // Check for hardcoded users first
+  if (hardcodedUsers[user.email as keyof typeof hardcodedUsers]) {
+    const userData = hardcodedUsers[user.email as keyof typeof hardcodedUsers];
+    
+    return {
+      id: user.id,
+      email: user.email as string,
+      name: userData.name,
+      role: userData.role,
+      created_at: user.created_at
+    } as User;
+  }
+  
+  // Get the user's profile from DB as a fallback
   const { data } = await supabase
     .from('users')
     .select('*')
@@ -40,6 +64,7 @@ export const signOut = async () => {
   return await supabase.auth.signOut();
 };
 
+// Still keeping this function but it's not used in the app anymore
 export const createUser = async (email: string, password: string, name: string, role: UserRole = 'cashier') => {
   // Create the auth user
   const { data: authData, error: authError } = await supabase.auth.signUp({

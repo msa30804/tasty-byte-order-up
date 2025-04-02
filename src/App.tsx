@@ -8,7 +8,6 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import PosLayout from "./components/pos/PosLayout";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
-import Signup from "./pages/Signup";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import AdminLayout from "./components/admin/AdminLayout";
 
@@ -40,7 +39,6 @@ const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
       <Route 
         path="/" 
         element={<ProtectedRoute element={<PosLayout />} requiredRole="cashier" />} 

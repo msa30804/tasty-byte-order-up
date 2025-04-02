@@ -5,21 +5,23 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
-import { Navigate, Link } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { UserIcon } from '@/components/pos/PosIcons';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const Login: React.FC = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [userType, setUserType] = useState('admin');
+  const [password, setPassword] = useState('msa0998');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { login, isAuthenticated, isLoading } = useAuth();
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) return;
     
     try {
       setIsSubmitting(true);
+      // Use the appropriate email based on the selected user type
+      const email = userType === 'admin' ? 'admin@tastybyte.com' : 'cashier@tastybyte.com';
       await login(email, password);
     } catch (error) {
       console.error('Login error:', error);
@@ -40,20 +42,24 @@ const Login: React.FC = () => {
             <UserIcon className="h-12 w-12 text-restaurant-burgundy" />
           </div>
           <CardTitle className="text-2xl">Tasty Byte POS</CardTitle>
-          <CardDescription>Enter your credentials to sign in</CardDescription>
+          <CardDescription>Login with your role</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input 
-                id="email" 
-                type="email" 
-                placeholder="your@email.com" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+              <Label htmlFor="userType">User Type</Label>
+              <Select 
+                defaultValue={userType}
+                onValueChange={setUserType}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select user type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="cashier">Cashier</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
@@ -64,6 +70,7 @@ const Login: React.FC = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
+              <p className="text-xs text-muted-foreground">Default password: msa0998</p>
             </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
@@ -74,12 +81,6 @@ const Login: React.FC = () => {
             >
               {isSubmitting ? 'Signing in...' : 'Sign In'}
             </Button>
-            <div className="text-center text-sm">
-              Don't have an account?{" "}
-              <Link to="/signup" className="text-restaurant-burgundy hover:underline">
-                Sign Up
-              </Link>
-            </div>
           </CardFooter>
         </form>
       </Card>
